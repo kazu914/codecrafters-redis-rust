@@ -2,6 +2,7 @@
 use std::{
     io::prelude::*,
     net::{TcpListener, TcpStream},
+    process,
 };
 
 fn main() {
@@ -20,5 +21,9 @@ fn main() {
 
 fn handle_connection(mut stream: TcpStream) {
     let response = "+PONG\r\n";
-    stream.write_all(response.as_bytes()).unwrap();
+    let mut buf = [0; 512];
+    loop {
+        stream.read(&mut buf).unwrap_or_else(|_| process::exit(1));
+        stream.write_all(response.as_bytes()).unwrap_or_else(|_| process::exit(1));
+    }
 }
