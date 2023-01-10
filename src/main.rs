@@ -2,28 +2,29 @@
 use std::{
     io::prelude::*,
     net::{TcpListener, TcpStream},
-    process,
 };
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
 
     println!("Started Redis Server");
-    for stream in listener.incoming() {
-        match stream {
-            Ok(_stream) => handle_connection(_stream),
-            Err(e) => {
-                println!("error: {}", e);
-            }
-        }
+    loop {
+        let (socket, _) = listener.accept().unwrap();
+        tokio::spawn(async move {
+            handle_connection(socket).await;
+        });
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
+async fn handle_connection(mut stream: TcpStream) {
     let response = "+PONG\r\n";
     let mut buf = [0; 512];
     loop {
-        stream.read(&mut buf).unwrap_or_else(|_| process::exit(1));
-        stream.write_all(response.as_bytes()).unwrap_or_else(|_| process::exit(1));
+        let bytes_read = stream.read(&mut buf).unwrap();
+        if bytes_read == 0 {
+            break;
+        }
+        stream.write_all(response.as_bytes()).unwrap();
     }
 }
