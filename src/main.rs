@@ -1,5 +1,6 @@
 // Uncomment this block to pass the first stage
 use std::{
+    char,
     io::prelude::*,
     net::{TcpListener, TcpStream},
 };
@@ -18,13 +19,25 @@ async fn main() {
 }
 
 async fn handle_connection(mut stream: TcpStream) {
-    let response = "+PONG\r\n";
-    let mut buf = [0; 512];
     loop {
+        let mut buf = [0; 512];
         let bytes_read = stream.read(&mut buf).unwrap();
         if bytes_read == 0 {
             break;
         }
-        stream.write_all(response.as_bytes()).unwrap();
+
+        let data = String::from_utf8_lossy(&buf);
+        let trimmed_data = data.trim_end_matches(char::from(0));
+        let data_array = trimmed_data.split("\r\n").collect::<Vec<&str>>();
+        match data_array[2] {
+            "ECHO" | "echo" => {
+                let response = "+".to_owned() + data_array[4] + "\r\n";
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+            _ => {
+                let response = "+PONG\r\n";
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        };
     }
 }
