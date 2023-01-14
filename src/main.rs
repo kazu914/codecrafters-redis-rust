@@ -1,43 +1,49 @@
 // Uncomment this block to pass the first stage
-use std::{
-    char,
-    io::prelude::*,
-    net::{TcpListener, TcpStream},
-};
+use anyhow::Result;
+use resp::RespConnection;
+use resp::Value::{Error, SimpleString};
+use tokio::net::{TcpListener, TcpStream};
+mod resp;
 
 #[tokio::main]
-async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
+async fn main() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:6379").await?;
 
     println!("Started Redis Server");
     loop {
-        let (socket, _) = listener.accept().unwrap();
-        tokio::spawn(async move {
-            handle_connection(socket).await;
-        });
+        let incoming = listener.accept().await;
+        match incoming {
+            Ok((stream, _)) => {
+                tokio::spawn(async move {
+                    handle_connection(stream).await.unwrap();
+                });
+            }
+            Err(e) => {
+                println!("ERROR: {}", e);
+            }
+        }
     }
 }
 
-async fn handle_connection(mut stream: TcpStream) {
+async fn handle_connection(stream: TcpStream) -> Result<()> {
+    let mut conn = RespConnection::new(stream);
+
     loop {
-        let mut buf = [0; 512];
-        let bytes_read = stream.read(&mut buf).unwrap();
-        if bytes_read == 0 {
+        let value = conn.read_value().await?;
+
+        if let Some(value) = value {
+            let (command, args) = value.to_command()?;
+            let response = match command.to_ascii_lowercase().as_ref() {
+                "ping" => SimpleString("PONG".to_string()),
+                "echo" => args.first().unwrap().clone(),
+                _ => Error(format!("command not implemented: {}", command)),
+            };
+
+            conn.write_value(response).await?;
+        } else {
             break;
         }
-
-        let data = String::from_utf8_lossy(&buf);
-        let trimmed_data = data.trim_end_matches(char::from(0));
-        let data_array = trimmed_data.split("\r\n").collect::<Vec<&str>>();
-        match data_array[2] {
-            "ECHO" | "echo" => {
-                let response = "+".to_owned() + data_array[4] + "\r\n";
-                stream.write_all(response.as_bytes()).unwrap();
-            }
-            _ => {
-                let response = "+PONG\r\n";
-                stream.write_all(response.as_bytes()).unwrap();
-            }
-        };
     }
+
+    Ok(())
 }
