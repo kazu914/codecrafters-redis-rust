@@ -26,7 +26,7 @@ impl Value {
         }
     }
 
-    fn unwrap_bulk(&self) -> String {
+    pub fn unwrap_bulk(&self) -> String {
         match self {
             Value::BulkString(str) => str.clone(),
             _ => panic!("not a bulk string"),
